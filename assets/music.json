@@ -1,0 +1,9 @@
+{
+  "source_name": "Curb Your Enthusiasm Theme (8 Bit Version).mp3",
+  "source_duration_seconds": 132.4001814058957,
+  "start_seconds": 0.137,
+  "loop_seconds": 12.96,
+  "sample_rate": 6000,
+  "music_channels": 1,
+  "expected_brr_bytes": 43740
+}

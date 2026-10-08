@@ -1,0 +1,8 @@
+{
+  "Snes": {
+    "Port1": {
+      "Type": "SnesController",
+      "Mapping1": { "X": 67, "A": 44, "B": 45, "Start": 6 }
+    }
+  }
+}

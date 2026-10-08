@@ -1,0 +1,13 @@
+.tools/
+build/
+*.obj
+*.sfc
+*.smc
+*.sym
+*.symfull
+*.log
+/hdr.asm
+/linkfile
+/src/main.asm
+/src/game.asm
+*.ps
