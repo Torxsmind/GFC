@@ -5,7 +5,7 @@ one or two switches and enjoy the inevitable engineering commentary.
 
 ![Game preview](assets/preview.png)
 
-Retro front-cover box art: [assets/box-art/gfc-cover.png](assets/box-art/gfc-cover.png).
+Retro front-cover box art: [gfc-cover.png](gfc-cover.png), beside `gfc.sfc` in the repository root.
 Created with the built-in image generation tool; the generation prompt is saved
 in [docs/box-art-prompt.txt](docs/box-art-prompt.txt).
 
@@ -55,6 +55,9 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Clean
 ```
 
 The build produces `gfc.sfc` and copies it and its debugger symbols into `build/`.
+Both ROM copies contain the same build. After a Git pull, run this build script
+before playing: the tracked root ROM may be an older release. The script forces
+a rebuild from source so the pulled binary's timestamp cannot skip compilation.
 Expect a **262,144-byte (256 KiB) headerless LoROM**, NTSC, with no SRAM, BIOS, or
 special cartridge chips. The compiler, assembler, linker, and audio converter
 come from PVSnesLib. Build errors propagate to the script.
