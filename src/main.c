@@ -19,7 +19,8 @@ u8 gfcCommentIndex = 0;
 u8 gfcCommentPool = 4;
 u8 gfcLastResult = GFC_TOGGLE;
 u16 gfcFrame = 0;
-u16 gfcChangeCount = 0;
+u32 gfcChangeCount = 0;
+char gfcScoreDigits[11] = "0000000000";
 u16 textMap[1024];
 u8 textDirty = 1;
 u16 lastPad = 0;
@@ -48,6 +49,39 @@ void clearLine(u8 y)
     textDirty = 1;
 }
 
+void showScore(void)
+{
+    u8 pos = 0, length, x, pair;
+    while (pos < 4 && gfcScoreDigits[pos] == '0') pos++;
+    length = 10 - pos;
+    x = 31 - ((length + 1) >> 1);
+    clearLine(0);
+    if (length & 1) {
+        pair = 100 + gfcScoreDigits[pos++] - '0';
+        textMap[x++] = (120 + pair) | (TEXT_WHITE << 10) | BG_TIL_PRIO;
+    }
+    while (pos < 10) {
+        pair = (gfcScoreDigits[pos] - '0') * 10 + gfcScoreDigits[pos+1] - '0';
+        textMap[x++] = (120 + pair) | (TEXT_WHITE << 10) | BG_TIL_PRIO;
+        pos += 2;
+    }
+}
+
+void countPress(void)
+{
+    u8 pos = 10;
+    gfcChangeCount++;
+    /* Decimal carry avoids slow 32-bit division on the SNES CPU. */
+    while (pos) {
+        pos--;
+        if (gfcScoreDigits[pos] < '9') {
+            gfcScoreDigits[pos]++;
+            break;
+        }
+        gfcScoreDigits[pos] = '0';
+    }
+}
+
 void showState(void)
 {
     u8 row, bit, x, y;
@@ -66,8 +100,16 @@ void showState(void)
 
 void chooseComment(void)
 {
-    gfcCommentPool = gfcPool(gfcState);
-    gfcCommentIndex = gfcRandomBelow(24);
+    u8 pool = gfcPool(gfcState);
+    u8 previous = gfcCommentIndex;
+    if (gfcReady && pool == gfcCommentPool) {
+        /* Select uniformly from the other 23 comments without retrying. */
+        gfcCommentIndex = gfcRandomBelow(23);
+        if (gfcCommentIndex >= previous) gfcCommentIndex++;
+    } else {
+        gfcCommentIndex = gfcRandomBelow(24);
+    }
+    gfcCommentPool = pool;
     clearLine(21);
     clearLine(23);
     textAt(2, 21, gfcComments[gfcCommentPool][gfcCommentIndex][0], TEXT_WHITE);
@@ -90,7 +132,6 @@ void toggle(u8 bit)
         textAt(2, 23, "CHAOS STILL NEEDS A SPEC.", TEXT_WHITE);
         playEffect(1);
     } else {
-        gfcChangeCount++;
         showState();
         chooseComment();
         playEffect((gfcLastResult == GFC_KICK) ? 2 : 0);
@@ -148,6 +189,7 @@ int main(void)
     bgSetDisable(2);
     showState();
     chooseComment();
+    showScore();
     dmaCopyVram((u8 *)textMap, TEXT_MAP, 2048);
     textDirty = 0;
     setScreenOn();
@@ -167,19 +209,33 @@ int main(void)
         pad = padsCurrent(0);
         pressed = pad & ~lastPad; /* edge-triggered: holding never repeats */
         lastPad = pad;
-        if (pressed & KEY_START) {
+        /* Count each action-button edge, including rejected choices. Holding
+         * never repeats. Simultaneous buttons each count; SELECT retains priority. */
+        if (pressed & KEY_X) countPress();
+        if (pressed & KEY_Y) countPress();
+        if (pressed & KEY_A) countPress();
+        if (pressed & KEY_B) countPress();
+        if (pressed & KEY_SELECT) countPress();
+        if (pressed & (KEY_X | KEY_Y | KEY_A | KEY_B | KEY_SELECT)) showScore();
+        if (pressed & KEY_SELECT) {
             gfcState = GFC_DEFAULT;
             gfcLastResult = GFC_TOGGLE;
-            gfcChangeCount++;
             showState();
             chooseComment();
             playEffect(0);
         } else {
-            /* Simultaneous edges are handled in this stable X, A, B order.
+            /* Simultaneous edges are handled in this stable X, A, B, Y order.
              * Every intermediate state still satisfies the one-or-two rule. */
             if (pressed & KEY_X) toggle(GFC_FAST);
             if (pressed & KEY_A) toggle(GFC_CHEAP);
             if (pressed & KEY_B) toggle(GFC_GOOD);
+            if (pressed & KEY_Y) {
+                gfcRandomize();
+                gfcLastResult = GFC_TOGGLE;
+                showState();
+                chooseComment();
+                playEffect(0);
+            }
         }
         animateKnobs();
     }

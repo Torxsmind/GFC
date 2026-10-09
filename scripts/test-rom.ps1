@@ -9,7 +9,7 @@ if (!(Test-Path "$root/.tools/mesen/settings.json")) {
 }
 New-Item -ItemType Directory -Force "$root/build/screenshots" | Out-Null
 $env:GFC_ROOT = $root
-$arguments = @('--testRunner', '--doNotSaveSettings', '--timeout=50',
+$arguments = @('--testRunner', '--doNotSaveSettings', '--timeout=120',
     '--snes.port1.type=SnesController',
     '--debug.scriptwindow.allowioosaccess=true',
     "$root/tests/verify-rom.lua", "$root/build/gfc.sfc")
@@ -18,7 +18,7 @@ $p = Start-Process -FilePath $exe -ArgumentList $arguments -WindowStyle Hidden -
     -RedirectStandardOutput "$root/build/mesen-test.log" `
     -RedirectStandardError "$root/build/mesen-test-error.log"
 $null = $p.Handle
-if (!$p.WaitForExit(55000)) {
+if (!$p.WaitForExit(125000)) {
     Stop-Process -Id $p.Id
     throw 'Mesen verification timed out. Inspect build/verification.txt.'
 }

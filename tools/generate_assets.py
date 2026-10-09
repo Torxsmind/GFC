@@ -45,6 +45,16 @@ COLORS = [
     "677c94", "e78f75", "a5bed7", "293340",
 ]
 RGB = [tuple(bytes.fromhex(c)) for c in COLORS]
+SMALL_FONT = {
+    "0": [7,5,5,5,7], "1": [2,6,2,2,7], "2": [7,1,7,4,7],
+    "3": [7,1,7,1,7], "4": [5,5,7,1,1], "5": [7,4,7,1,7],
+    "6": [7,4,7,5,7], "7": [7,1,1,2,2], "8": [7,5,7,5,7],
+    "9": [7,5,7,1,7], " ": [0]*5,
+    "C": [7,4,4,4,7], "H": [5,5,7,5,5], "A": [2,5,7,5,5],
+    "N": [5,7,7,7,5], "G": [7,4,5,5,7], "E": [7,4,7,4,7],
+    "S": [7,4,7,1,7], "O": [7,5,5,5,7], "R": [6,5,6,5,5],
+    "W": [5,5,7,7,5], "M": [5,7,7,5,5], "T": [7,2,2,2,2],
+}
 
 
 class Canvas:
@@ -75,6 +85,13 @@ class Canvas:
     def center(self, y, value, color=7, spacing=6):
         self.text((self.w-(len(value)*spacing-1))//2, y, value, color, spacing=spacing)
 
+    def small_text(self, x, y, value, color=7):
+        for ch in value:
+            for yy,bits in enumerate(SMALL_FONT[ch]):
+                for xx in range(3):
+                    if bits & (1 << (2-xx)): self.pixel(x+xx,y+yy,color)
+            x += 4
+
 
 def tile4bpp(pixels):
     """SNES bitplanes 0/1 interleaved, then bitplanes 2/3 interleaved."""
@@ -90,8 +107,11 @@ def chunk(kind, data):
     return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data))
 
 
-def png(path, canvas):
-    rows = b"".join(b"\0"+bytes(v for c in row for v in RGB[c]) for row in canvas.p)
+def png(path, canvas, badge_colors=None):
+    rows = b"".join(b"\0"+bytes(v for x,c in enumerate(row)
+        for v in (badge_colors if badge_colors and
+            ((208 <= x < 232 and 56 <= y < 144) or (136 <= x < 240 and 200 <= y < 224)) else RGB)[c])
+        for y,row in enumerate(canvas.p))
     path.write_bytes(b"\x89PNG\r\n\x1a\n" +
                      chunk(b"IHDR",struct.pack(">IIBBBBB",canvas.w,canvas.h,8,2,0,0,0)) +
                      chunk(b"IDAT",zlib.compress(rows)) + chunk(b"IEND",b""))
@@ -99,8 +119,9 @@ def png(path, canvas):
 
 def graphics():
     c = Canvas(256,224)
-    c.center(14, "GOOD / FAST / CHEAP", 7, spacing=7)
-    c.center(30, "CHOOSE YOUR ARCHITECTURE PRINCIPLES", 12)
+    c.small_text(152,2,"CHANGE SCORE",6)
+    c.center(18, "CHOOSE YOUR ARCHITECTURE PRINCIPLES", 12)
+    c.center(32, "ONE OR TWO ONLY", 6)
     c.rect(20,52,216,110,2,10)   # panel shadow
     c.rect(20,48,216,110,6,10)   # one-pixel beveled edge
     c.rect(21,49,214,108,4,9)
@@ -125,7 +146,17 @@ def graphics():
             c.rect(34,y+24,190,1,4)
     c.rect(12,164,232,36,15,5)
     c.rect(13,165,230,34,1,4)
-    c.center(210,"START: RESET   ONE OR TWO ONLY",12)
+    # Matching light-gray action controls with their input badges on the right.
+    for x in (16,130):
+        c.rect(x,204,110,18,2,8)
+        c.rect(x+1,204,108,16,5,7)
+        c.rect(x+2,205,106,13,6,6)
+    c.text(22,209,"REFRESH",2)
+    c.rect(76,207,46,12,2,6)
+    c.text(82,209,"SELECT",8)
+    c.text(138,209,"RANDOM",2)
+    c.rect(219,204,18,16,10,7)
+    c.text(225,209,"Y",2)
     # Deduplicate the static screen. Include tile zero as an empty background.
     tiles = [tile4bpp([[0]*8 for _ in range(8)])]
     lookup = {tiles[0]:0}
@@ -138,7 +169,10 @@ def graphics():
             if tile not in lookup:
                 lookup[tile] = len(tiles)
                 tiles.append(tile)
-            tilemap.append(lookup[tile])
+            # Dedicated badge palette preserves the screen's muted UI colors.
+            badge_palette = 6 if ((26 <= tx <= 28 and 7 <= ty <= 17)
+                or (17 <= tx <= 29 and 25 <= ty <= 27)) else 0
+            tilemap.append(lookup[tile] | (badge_palette << 10))
     assert len(tiles)*32 <= 0x4000, "Panel overlaps OBJ VRAM"
     (ASSETS/"panel.pic").write_bytes(b"".join(tiles))
     (ASSETS/"panel.map").write_bytes(struct.pack("<1024H",*tilemap))
@@ -147,6 +181,13 @@ def graphics():
     for foreground in (7,6,11,13):
         pals.extend([RGB[0],RGB[foreground],RGB[2]]+[RGB[0]]*13)
     pals.extend([RGB[0]]*(128-len(pals)))
+    # Requested four-color badges: B yellow, X blue, Y green, A red.
+    badge_colors = list(RGB)
+    badge_colors[11] = (248, 208, 48)
+    badge_colors[14] = (64, 120, 232)
+    badge_colors[10] = (48, 184, 96)
+    badge_colors[13] = (232, 64, 64)
+    pals[6*16:7*16] = badge_colors
     (ASSETS/"palette.pal").write_bytes(b"".join(struct.pack("<H", (r>>3)|((g>>3)<<5)|((b>>3)<<10)) for r,g,b in pals))
     font = []
     for code in range(32,128):
@@ -172,6 +213,13 @@ def graphics():
     for ty in range(3):
         for tx in range(8):
             font.append(tile4bpp([r[tx*8:tx*8+8] for r in rail.p[ty*8:ty*8+8]]))
+    # Tiles 120..229 pack two 3x5 score digits into each hardware tile.
+    # First digit 10 is blank for right-aligning an odd number of digits.
+    for first in range(11):
+        for second in range(10):
+            glyph = Canvas(8,8)
+            glyph.small_text(1,2,(str(first) if first < 10 else " ")+str(second),1)
+            font.append(tile4bpp(glyph.p))
     (ASSETS/"font.pic").write_bytes(b"".join(font))
     # BG2 palette 5 is the base art palette, used by the white rail patch.
     pals[80:96] = RGB
@@ -203,7 +251,8 @@ def graphics():
                 if v: c.pixel((184 if on else 152)+xx,62+row*32+yy, ({7:5,8:6,9:4}.get(v,v) if not on else v))
     c.text(17,168,"ON TIME. ON SPEC.",7,spacing=8)
     c.text(17,184,"OFF BUDGET.",7,spacing=8)
-    png(ASSETS/"preview.png",c)
+    c.small_text(225,2,"000000",7)
+    png(ASSETS/"preview.png",c,badge_colors)
     print(f"Graphics: {len(tiles)} unique panel tiles, original 5x7 font, 16x16 knob")
 
 

@@ -45,6 +45,14 @@ u8 gfcToggle(u8 selected)
     return GFC_TOGGLE;
 }
 
+/* Uniformly choose one of the five valid masks other than the current mask. */
+void gfcRandomize(void)
+{
+    u8 next = 1 + gfcRandomBelow(5);
+    if (next >= gfcState) next++;
+    gfcState = next;
+}
+
 /* Canonical comment-pool order: FAST, CHEAP, GOOD, F+C, F+G, C+G. */
 u8 gfcPool(u8 state)
 {

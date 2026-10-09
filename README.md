@@ -5,6 +5,10 @@ one or two switches and enjoy the inevitable engineering commentary.
 
 ![Game preview](assets/preview.png)
 
+Retro front-cover box art: [assets/box-art/gfc-cover.png](assets/box-art/gfc-cover.png).
+Created with the built-in image generation tool; the generation prompt is saved
+in [docs/box-art-prompt.txt](docs/box-art-prompt.txt).
+
 ## Play
 
 The playable ROM is **`build/gfc.sfc`**. Open it in Mesen, Snes9x, or bsnes.
@@ -19,12 +23,28 @@ powershell -ExecutionPolicy Bypass -File scripts/open-tool.ps1 -Tool Mesen -Rom 
 | X | Toggle FAST | X |
 | A | Toggle CHEAP | A |
 | B | Toggle GOOD | B |
-| START | Reset to FAST + GOOD | Enter |
+| Y | Random different selection | Y |
+| SELECT (REFRESH on screen) | Reset to FAST + GOOD and show a new comment | Enter |
 
-The mapping badges appear beside the corresponding rails. White rails and knobs
+The mapping badges appear beside the corresponding rails and use the
+requested colors: X blue, Y green, B yellow, and A red. White rails and knobs
 mean ON; dark rails and gray knobs mean OFF. Knobs slide between positions.
 Holding a button does not repeat. Map a controller through Mesen's SNES input
 settings if desired; Batocera uses its own controller configuration.
+
+Y chooses uniformly among the five other valid selections: any single option
+or any pair, always different from the current selection. The Change Score at
+the upper right counts each new X/Y/A/B/SELECT press, including rejected choices.
+It starts at `000000`, uses 3x5 digits (two pixels smaller than the regular 5x7
+font), and expands beyond six digits as needed. REFRESH and RANDOM appear as
+neighboring buttons at the bottom. “ONE OR TWO ONLY” sits under the architecture
+subtitle; the redundant GOOD / FAST / CHEAP heading has been removed.
+Holding does not repeat; simultaneous button presses each count. SELECT resets
+the switches and keeps the score. REFRESH and RANDOM use matching light-gray
+backgrounds. REFRESH has a smaller black SELECT badge with white letters at the
+right; it always picks a different comment from the previous one. SELECT is
+mapped to Enter in this checkout's Mesen configuration.
+Reloading the ROM clears the score.
 
 ## Build the game
 
@@ -87,7 +107,7 @@ into SPC700 RAM at startup, so playback does not stall the input loop.
 
 Background music starts automatically using a 12.96-second phrase from the supplied
 “Curb Your Enthusiasm Theme (8 Bit Version).mp3”. It repeats continuously, including
-when START resets the switches. The phrase is converted to 6 kHz mono to fit the
+when SELECT resets the switches. The phrase is converted to 6 kHz mono to fit the
 SNES's 64 KiB audio memory alongside the driver and effects. This softens the
 high frequencies; the full 132-second recording is not included.
 
@@ -106,7 +126,7 @@ The music occupies DSP voice 0, leaving other voices available for button effect
 ## Rules and random selection
 
 The state is a three-bit mask: FAST=1, CHEAP=2, GOOD=4. Its only stored values are
-1 through 6. Startup and START select FAST + GOOD (5).
+1 through 6. Startup and SELECT select FAST + GOOD (5).
 
 Turning OFF an active switch succeeds if another switch stays ON. Turning OFF
 the last one is rejected without changing the mask, with a buzz and a rejection
@@ -118,13 +138,13 @@ A nonzero 16-bit xorshift generator advances each frame and whenever randomness
 is requested. Button timing therefore changes the random sequence. A random bit
 selects one of the two previous switches with approximately equal probability.
 Powering on and replaying identical frame timing gives the same sequence; this
-is intentional pseudo-randomness. START resets the switches, not the generator.
+is intentional pseudo-randomness. SELECT resets the switches, not the generator.
 
 Each successful toggle selects a comment from the new state's pool. The six
 fixed-size arrays have 24 entries each, already wrapped to at most two lines of
 28 characters. Rejection sampling avoids the usual modulo-24 selection bias.
 Rejection messages remain until the next accepted change or reset. Simultaneous
-button edges are processed in X, A, B order; START takes priority.
+button edges are processed in X, A, B order; SELECT takes priority.
 
 ## SNES design adjustments
 
@@ -150,6 +170,8 @@ checks startup, all 18 state/button transitions, correct comment pools and text,
 holding, rejection, reset, 42 simultaneous button combinations, and 240 random
 replacement trials. It also observes SPC700 DSP playback for distinct effects
 and verifies that background music stays active through two complete loops.
+It checks all five Y alternatives from every state, Y hold suppression, score
+increments, simultaneous presses, and decimal score display beyond 65,535.
 Results go to `build/verification.txt`; emulator screenshots go to
 `build/screenshots/`. Test-time Lua file access is process-local and is not saved
 to your emulator settings.

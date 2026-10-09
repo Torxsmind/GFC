@@ -70,7 +70,7 @@ local pools = {[1]=0,[2]=1,[4]=2,[3]=3,[5]=4,[6]=5}
 local names = {[1]="fast",[2]="cheap",[4]="good",[3]="fast-cheap",[5]="fast-good",[6]="cheap-good"}
 local buttons = {{"x",1},{"a",2},{"b",4}}
 local function go(state)
-    press("start")
+    press("select")
     for _,button in ipairs(routes[state]) do press(button) end
     check(read("gfcState") == state, "Cannot reach state " .. state .. "; got " .. read("gfcState"))
 end
@@ -119,6 +119,10 @@ local task = coroutine.create(function()
     end
     wait(20)
     check(read("gfcState") == 5, "Default is not FAST + GOOD")
+    for x=28,30 do
+        check((emu.read16(addr("textMap")+x*2, emu.memType.snesDebug)&1023) == 120,
+              "Score must start with six zero digits in the upper right")
+    end
     checkComment()
     screenshot("default")
     log:write("PASS: boot, default FAST + GOOD, native screen capture\n"); log:flush()
@@ -136,7 +140,7 @@ local task = coroutine.create(function()
             local nextState, result = read("gfcState"), read("gfcLastResult")
             if state == button[2] then
                 check(nextState == state and result == 0, "Final switch must reject OFF")
-                check(read16("gfcChangeCount") == count, "Reject counted as a change")
+                check(read16("gfcChangeCount") == count+1, "Rejected press missing from score")
             elseif (state & button[2]) ~= 0 then
                 check(nextState == (state ~ button[2]) and result == 1, "ON switch did not turn OFF")
                 checkComment()
@@ -162,6 +166,25 @@ local task = coroutine.create(function()
     press("x")
     screenshot("rejected")
     log:write("PASS: hold suppression and rejection screen\n"); log:flush()
+    go(5)
+    for trial=1,60 do
+        local previous = read("gfcCommentIndex")
+        local score = read16("gfcChangeCount")
+        press("select")
+        check(read("gfcState") == 5, "REFRESH must restore FAST + GOOD")
+        check(read("gfcCommentIndex") ~= previous, "REFRESH repeated the same comment")
+        check(read16("gfcChangeCount") == score+1, "REFRESH must preserve and increment score")
+        checkComment()
+    end
+    log:write("PASS: 60 REFRESH presses each display a new comment and preserve the score\n"); log:flush()
+    local refreshScore = read16("gfcChangeCount")
+    press("select",90)
+    check(read16("gfcChangeCount") == refreshScore+1, "Held SELECT repeated")
+    local refreshComment = read("gfcCommentIndex")
+    refreshScore = read16("gfcChangeCount")
+    press("start")
+    check(read16("gfcChangeCount") == refreshScore and
+          read("gfcCommentIndex") == refreshComment, "START still triggers refresh")
 
     for state=1,6 do
         for combo=1,7 do
@@ -174,12 +197,12 @@ local task = coroutine.create(function()
             check(value>=1 and value<=6, "Simultaneous presses produced invalid state")
         end
     end
-    desired = {x=true,a=true,b=true,start=true}
+    desired = {x=true,a=true,b=true,select=true}
     wait(4)
     desired = {}
     wait(4)
-    check(read("gfcState") == 5, "START must take priority over toggle edges")
-    log:write("PASS: 42 simultaneous combinations and START priority\n"); log:flush()
+    check(read("gfcState") == 5, "SELECT must take priority over toggle edges")
+    log:write("PASS: 42 simultaneous combinations and SELECT priority\n"); log:flush()
 
     local kicks = {[3]=0,[6]=0}
     for trial=1,240 do
@@ -206,6 +229,49 @@ local task = coroutine.create(function()
     for _ in pairs(unique) do distinct=distinct+1 end
     check(distinct >= 3, "Three outcomes did not use distinct sound samples")
     log:write("PASS: SNES DSP played three distinct effect samples ("..soundKeyOns.." key-ons)\n")
+    for state=1,6 do
+        local seen = {}
+        for trial=1,60 do
+            go(state)
+            local score = read16("gfcChangeCount")
+            press("y")
+            local nextState = read("gfcState")
+            check(nextState >= 1 and nextState <= 6 and nextState ~= state,
+                  "Y must choose a different valid selection")
+            check(read16("gfcChangeCount") == score+1, "Y missing from score")
+            checkComment()
+            seen[nextState] = true
+        end
+        for other=1,6 do
+            if other ~= state then check(seen[other], "Y did not reach every alternative") end
+        end
+    end
+    local score = read16("gfcChangeCount")
+    press("y",90)
+    check(read16("gfcChangeCount") == score+1, "Held Y repeated")
+    score = read16("gfcChangeCount")
+    desired = {x=true,y=true,a=true,b=true,select=true}
+    wait(4); desired = {}; wait(4)
+    check(read16("gfcChangeCount") == score+5, "Simultaneous edges must each count")
+    check(read("gfcState") == 5, "SELECT priority changed")
+    for offset=0,3 do
+        emu.write(addr("gfcChangeCount")+offset, offset < 2 and 255 or 0, emu.memType.snesDebug)
+    end
+    local seedDigits = "0000065535"
+    for col=1,#seedDigits do
+        emu.write(addr("gfcScoreDigits")+col-1, seedDigits:byte(col), emu.memType.snesDebug)
+    end
+    press("select")
+    check(read16("gfcChangeCount") == 0 and
+          emu.read16(addr("gfcChangeCount")+2, emu.memType.snesDebug) == 1,
+          "Score must continue beyond 65535")
+    local expected = {126,175,156} -- 06, 55, 36 in packed 3x5 digit tiles
+    for col=1,#expected do
+        local tile = emu.read16(addr("textMap")+(27+col)*2, emu.memType.snesDebug)&1023
+        check(tile == expected[col], "Small padded score display mismatch")
+    end
+    screenshot("random-and-score")
+    log:write("PASS: Y selects all five alternatives from all six states; score includes rejected and simultaneous presses; held Y does not repeat\n")
     -- Observe two complete sample loops, including the continuation ROM bank.
     local wraps, previous = 0, nil
     for sample=1,180 do

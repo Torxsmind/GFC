@@ -16,6 +16,7 @@ extern u16 gfcRandom;
 u16 gfcRandomNext(void);
 u8 gfcRandomBelow(u8 bound);
 u8 gfcToggle(u8 selected);
+void gfcRandomize(void);
 u8 gfcPool(u8 state);
 
 #endif
